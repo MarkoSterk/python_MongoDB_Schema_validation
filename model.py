@@ -1,15 +1,11 @@
-from flask import abort, jsonify
+from flask import abort, jsonify, Response
 from datetime import datetime
 import secrets
 from copy import deepcopy
 
-'''
-base Model class which must be inherited by all Schemas. 
-'''
-
 class Model:
     collection = 'db'
-    session = 'session'
+    session = object()
     __ModelName__ = 'Model'
 
     Schema = {}
@@ -109,7 +105,8 @@ class Model:
             validationErrors=Model.checkUnique(self, Schema, modelData, validationErrors)
         validationErrors=Model.checkValidators(Schema, modelData, validationErrors)
         
-        if len(validationErrors)>0: return Model.ModelError('Validation error', validationErrors, 400)
+        if len(validationErrors)>0: 
+            return Model.ModelError('Validation error', validationErrors, 400)
         return True
     
 
@@ -126,11 +123,6 @@ class Model:
     ##################################instance methods##########################################
     #############################################################################################
     def save(self, pre_hooks=None):
-        '''
-        method for saving a new document to db collection.
-        takes a class instance and list of pre_hooks methods which are called before the actual 
-        saving of the document. e.g of pre_hook method: password hashing function of new user document.
-        '''
         if self.session[self.collection].find_one({'_id': self._id})==None:
             
             if pre_hooks is None:
@@ -145,42 +137,34 @@ class Model:
     
 
     def delete(self):
-        '''
-        method for deleting a document from the db collection
-        '''
         return self.session[self.collection].delete_one({'_id': self._id})
     
 
     def update(self, data, onLoad=True, pre_hooks=None):
         newSelf = deepcopy(self)
-        
         newSelf = Model.updateAttributes(newSelf, newSelf.Schema, data)
-
         if newSelf.validate(newSelf.Schema, vars(newSelf), onLoad=onLoad):
             self = Model.updateAttributes(self, self.Schema, data)
-            
+
             if pre_hooks is None:
                 pre_hooks=[]
             for func in pre_hooks:
-                print(f'Executing {func.__name__}')
                 self = func()
             
             self.session[self.collection].replace_one({'_id': self._id}, vars(self))
     
     def populate(self, populateData=None):
-        '''
-        method to populate a designated field in a document.
-        '''
-        data = populateData['model'].findOne({'_id': getattr(self, populateData['field'])})
+        try:
+            data = populateData['model'].findOne({'_id': getattr(self, populateData['field'])})
 
-        if populateData is None:
-            populateData={}
-        for key in populateData['hideFields']:
-            if key in vars(data):
-                delattr(data, key)
-        
-        setattr(self, populateData['field'], vars(data))
-        return self
+            for key in populateData['hideFields']:
+                if key in vars(data):
+                    delattr(data, key)
+            
+            setattr(self, populateData['field'], vars(data))
+            return self
+        except:
+            return self
 
 
     ##########################################################################################
@@ -188,25 +172,15 @@ class Model:
     ##########################################################################################
     @classmethod
     def ModelError(cls, errorType, validationErrors, statusCode):
-        '''
-        When an error occurs during validation this method is called and an error is send with the
-        appropriate error messages and status code
-        '''
-        
-        response = jsonify({
+        response = {
         'status': errorType,
         'message': validationErrors,
         'code': statusCode
-        })
-        response.status_code = statusCode
-        return abort(response)
+        }
+        return abort(statusCode, response)
 
     @classmethod
     def filterData(cls, data):
-        '''
-        filter method for filtering incoming data (type: dict) to remove any unwanted fields
-        which are not in the schema
-        '''
         filteredData = {}
         for key in data:
             if key in cls.Schema:
@@ -215,10 +189,6 @@ class Model:
 
     @classmethod
     def findOne(cls, query, validate=True, onLoad=True):
-        '''
-        method to query the db collection for a specified document
-        The query is of type dict e.g: {'_id': 325908zt5h3g8924phjg3g} or any other field
-        '''
         query = cls.session[cls.collection].find_one(query)
         if query:
             return cls(query, validate=validate, onLoad=onLoad)
@@ -226,10 +196,6 @@ class Model:
     
     @classmethod
     def findMany(cls, query, validate=True, onLoad=True):
-        '''
-        method to query the db collection for many documents. 
-        The query is of same type as in the method findOne.
-        '''
         query = cls.session[cls.collection].find(query)
         if query:
             return [cls(q, validate=validate, onLoad=onLoad) for q in query]
