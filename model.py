@@ -1,7 +1,8 @@
-from flask import abort, jsonify, Response
+from flask import abort, jsonify, make_response
 from datetime import datetime
 import secrets
 from copy import deepcopy
+import json
 
 class Model:
     collection = 'db'
@@ -79,9 +80,10 @@ class Model:
         for key in Schema:
             if 'unique' in Schema[key]:
                 if Schema[key]['unique']:
-                    if self.session[self.collection].find_one({key: modelData[key]}):
-                        #Model.ModelError('Validation error', f'{key} is already present in the database', 400)
-                        validationErrors.append({key: ['unique field', 'Already present in database']})
+                    if key in modelData:
+                        if self.session[self.collection].find_one({key: modelData[key]}):
+                            #Model.ModelError('Validation error', f'{key} is already present in the database', 400)
+                            validationErrors.append({key: ['unique field', 'Already present in database']})
         return validationErrors
 
 
@@ -172,12 +174,14 @@ class Model:
     ##########################################################################################
     @classmethod
     def ModelError(cls, errorType, validationErrors, statusCode):
-        response = {
+        response = jsonify({
         'status': errorType,
         'message': validationErrors,
         'code': statusCode
-        }
-        return abort(statusCode, response)
+        })
+        #return abort(statusCode, response)
+        response = make_response(response)
+        return abort(response, statusCode)
 
     @classmethod
     def filterData(cls, data):
