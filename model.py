@@ -28,8 +28,8 @@ class Model:
         if onLoad:
             setattr(self, '_id', modelData['_id'])
             setattr(self, '_createdAt', modelData['_createdAt'])
-        if '_id' not in modelData.keys(): setattr(self, '_id', secrets.token_hex(16))
-        if '_createdAt' not in modelData.keys(): setattr(self, '_createdAt', datetime.utcnow().strftime('%d-%m-%Y %H:%M'))
+        if '_id' not in modelData: setattr(self, '_id', secrets.token_hex(16))
+        if '_createdAt' not in modelData: setattr(self, '_createdAt', datetime.utcnow().strftime('%d-%m-%Y %H:%M:%S'))
 
 
     def __repr__(self):
@@ -118,7 +118,11 @@ class Model:
             for key in data[operation]:
                 if key in Schema:
                     if operation=='$set': setattr(updateObject, key, data[operation][key])
-                    if operation=='$unset': delattr(updateObject, key)
+                    if operation=='$unset': 
+                        try:
+                            delattr(updateObject, key)
+                        except:
+                            pass
         return updateObject
 
     ############################################################################################
@@ -199,10 +203,18 @@ class Model:
         return None
     
     @classmethod
-    def findMany(cls, query, validate=True, onLoad=True):
-        query = cls.session[cls.collection].find(query)
+    def findMany(cls, query, limit=0, validate=True, onLoad=True):
+        query = cls.session[cls.collection].find(query).limit(limit)
         if query:
             return [cls(q, validate=validate, onLoad=onLoad) for q in query]
+        return None
+
+    @classmethod
+    def searchInOtherCollection(cls, collection, query):
+        #print(collection, query)
+        query = cls.session[collection].find_one(query)
+        if query:
+            return query
         return None
     
 
